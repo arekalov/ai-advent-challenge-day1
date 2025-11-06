@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">ai-advent-1</string>
+    
+    <!-- Chat Screen -->
+    <string name="welcome_message">Привет! Я AI-анекдотчик. Опиши ситуацию для анекдота!</string>
+    
     <!--
     This string is used for square devices and overridden by hello_world in
     values-round/strings.xml for round devices.

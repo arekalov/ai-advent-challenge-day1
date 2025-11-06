@@ -34,11 +34,11 @@ class YandexGptApi @Inject constructor(
 
     suspend fun sendMessage(messages: List<MessageDto>): Result<ChatResponse> = runCatching {
         val request = YandexGptRequest(
-            modelUri = "gpt://$folderId/yandexgpt-lite",
+            modelUri = "gpt://$folderId/yandexgpt",
             completionOptions = CompletionOptions(
                 stream = false,
                 temperature = 0.8,
-                maxTokens = 3000
+                maxTokens = 8000
             ),
             messages = messages,
             jsonObject = true,
@@ -48,8 +48,12 @@ class YandexGptApi @Inject constructor(
                     properties = mapOf(
                         "response" to Property(type = "string"),
                         "category" to Property(type = "string"),
+                        "stage" to Property(type = "string"),
+                        "situation" to Property(type = "string"),
+                        "heroes" to Property(type = "string"),
+                        "humor_type" to Property(type = "string")
                     ),
-                    required = listOf("response", "category")
+                    required = listOf("response", "category", "stage", "situation", "heroes", "humor_type")
                 )
             )
         )
@@ -62,6 +66,7 @@ class YandexGptApi @Inject constructor(
 
         // Логируем сырой HTTP ответ
         val rawResponse = httpResponse.bodyAsText()
+        Log.d("YandexGptApi", "Raw API response:\n$rawResponse")
 
         // Десериализуем ответ
         val response: YandexGptResponse = json.decodeFromString(rawResponse)
@@ -84,9 +89,17 @@ class YandexGptApi @Inject constructor(
                 }
 
                 val jsonResponse = json.decodeFromString<JsonResponse>(messageText)
+                
+                // Проверяем, что response не пустой
+                if (jsonResponse.response.isBlank()) {
+                    Log.e("YandexGptApi", "Model returned empty response field! JSON: $messageText")
+                    throw Exception("Model returned empty response. Please try again.")
+                }
+                
                 ChatResponse(
-                    text = jsonResponse.response,
+                    text = jsonResponse.response.trim(),
                     category = jsonResponse.category,
+                    stage = jsonResponse.stage,
                     totalTokens = totalTokens
                 )
             }
@@ -97,6 +110,7 @@ class YandexGptApi @Inject constructor(
                 ChatResponse(
                     text = messageText,
                     category = "Другое",
+                    stage = "Ошибка",
                     totalTokens = totalTokens
                 )
             }
@@ -110,6 +124,7 @@ class YandexGptApi @Inject constructor(
                 ChatResponse(
                     text = messageText,
                     category = "Другое",
+                    stage = "Ошибка",
                     totalTokens = totalTokens
                 )
             }

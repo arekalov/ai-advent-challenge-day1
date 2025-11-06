@@ -1,10 +1,12 @@
 package com.arekalov.aiadventchallenge.wear.presentation.chat
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arekalov.aiadventchallenge.domain.model.ChatRequest
 import com.arekalov.aiadventchallenge.domain.model.Message
 import com.arekalov.aiadventchallenge.domain.repository.ChatRepository
+import com.arekalov.aiadventchallenge.wear.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +24,8 @@ data class WearChatUiState(
 )
 
 class WearChatViewModel @Inject constructor(
-    private val repository: ChatRepository
+    private val repository: ChatRepository,
+    private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WearChatUiState())
@@ -31,7 +34,7 @@ class WearChatViewModel @Inject constructor(
     init {
         val welcomeMessage = Message(
             id = UUID.randomUUID().toString(),
-            text = "Привет! Я AI-анекдотчик. Расскажи ситуацию!",
+            text = context.getString(R.string.welcome_message),
             isUser = false,
             category = ""
         )
