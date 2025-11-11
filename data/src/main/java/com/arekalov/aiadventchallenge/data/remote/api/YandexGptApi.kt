@@ -32,12 +32,15 @@ class YandexGptApi @Inject constructor(
         prettyPrintIndent = "  "
     }
 
-    suspend fun sendMessage(messages: List<MessageDto>): Result<ChatResponse> = runCatching {
+    suspend fun sendMessage(
+        messages: List<MessageDto>,
+        temperature: Float = 0.7f
+    ): Result<ChatResponse> = runCatching {
         val request = YandexGptRequest(
             modelUri = "gpt://$folderId/yandexgpt",
             completionOptions = CompletionOptions(
                 stream = false,
-                temperature = 0.8,
+                temperature = temperature.toDouble(),
                 maxTokens = 8000
             ),
             messages = messages,

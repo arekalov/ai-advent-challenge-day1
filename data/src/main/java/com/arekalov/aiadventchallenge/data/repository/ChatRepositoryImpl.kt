@@ -60,7 +60,7 @@ class ChatRepositoryImpl @Inject constructor(
             }
         }
 
-        api.sendMessage(messages).getOrThrow()
+        api.sendMessage(messages, request.temperature).getOrThrow()
     }
     
     private fun determineNextStage(lastBotMessage: Message?, userMessage: String): String {

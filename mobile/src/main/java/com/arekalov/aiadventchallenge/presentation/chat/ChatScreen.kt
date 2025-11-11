@@ -25,6 +25,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +36,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -42,7 +45,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -164,6 +169,15 @@ fun ChatScreen(
                     }
                 }
             }
+
+            // Temperature selector
+            TemperatureSelector(
+                selectedTemperature = state.selectedTemperature,
+                onTemperatureChange = { temperature ->
+                    viewModel.handleIntent(ChatIntent.UpdateTemperature(temperature))
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
             // Input field
             MessageInput(
@@ -381,6 +395,84 @@ private fun MessageItemAssistantPreview() {
                 totalTokens = 150
             )
         )
+    }
+}
+
+@Composable
+fun TemperatureSelector(
+    selectedTemperature: Float,
+    onTemperatureChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    val temperatureOptions = listOf(
+        0.0f to "🧊 Точный (0.0)",
+        0.7f to "🌤️ Сбалансированный (0.7)",
+        1.0f to "🔥 Креативный (1.0)"
+    )
+    
+    val selectedOption = temperatureOptions.find { it.first == selectedTemperature }
+        ?: temperatureOptions[1]
+    
+    val (emoji, description) = when {
+        selectedTemperature <= 0.3f -> "🧊" to "Точный режим"
+        selectedTemperature < 1.0f -> "🌤️" to "Сбалансированный режим"
+        else -> "🔥" to "Креативный режим"
+    }
+    
+    val backgroundColor = when {
+        selectedTemperature <= 0.3f -> Color(0xFFE3F2FD) // Light Blue
+        selectedTemperature < 1.0f -> Color(0xFFF1F8E9) // Light Green
+        else -> Color(0xFFFFEBEE) // Light Red
+    }
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            TextButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "$emoji $description",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "%.1f".format(selectedTemperature),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                temperatureOptions.forEach { (temp, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            onTemperatureChange(temp)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

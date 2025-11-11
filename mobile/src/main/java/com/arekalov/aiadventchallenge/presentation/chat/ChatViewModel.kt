@@ -45,12 +45,17 @@ class ChatViewModel @Inject constructor(
         when (intent) {
             is ChatIntent.SendMessage -> sendMessage(intent.text)
             is ChatIntent.UpdateInputText -> updateInputText(intent.text)
+            is ChatIntent.UpdateTemperature -> updateTemperature(intent.temperature)
             ChatIntent.ClearError -> clearError()
         }
     }
 
     private fun updateInputText(text: String) {
         _state.update { it.copy(inputText = text) }
+    }
+    
+    private fun updateTemperature(temperature: Float) {
+        _state.update { it.copy(selectedTemperature = temperature) }
     }
 
     private fun sendMessage(text: String) {
@@ -75,7 +80,8 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val request = ChatRequest(
                 userMessage = inputText,
-                conversationHistory = _state.value.messages.dropLast(1)
+                conversationHistory = _state.value.messages.dropLast(1),
+                temperature = _state.value.selectedTemperature
             )
 
             repository.sendMessage(request)
@@ -145,7 +151,8 @@ class ChatViewModel @Inject constructor(
             
             val request = ChatRequest(
                 userMessage = "CONTINUE",
-                conversationHistory = _state.value.messages
+                conversationHistory = _state.value.messages,
+                temperature = _state.value.selectedTemperature
             )
             
             repository.sendMessage(request)
