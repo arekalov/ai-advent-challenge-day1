@@ -1,16 +1,24 @@
 package com.arekalov.aiadventchallenge.data.repository
 
-import com.arekalov.aiadventchallenge.data.remote.api.YandexGptApi
-import com.arekalov.aiadventchallenge.data.remote.dto.MessageDto
+import android.util.Log
+import com.arekalov.aiadventchallenge.data.provider.ModelRegistry
 import com.arekalov.aiadventchallenge.domain.model.ChatRequest
 import com.arekalov.aiadventchallenge.domain.model.ChatResponse
 import com.arekalov.aiadventchallenge.domain.model.Message
 import com.arekalov.aiadventchallenge.domain.repository.ChatRepository
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 
 class ChatRepositoryImpl @Inject constructor(
-    private val api: YandexGptApi
+    private val registry: ModelRegistry
 ) : ChatRepository {
+    
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     override suspend fun sendMessage(request: ChatRequest): Result<ChatResponse> = runCatching {
         // Определяем текущий stage из последнего сообщения бота
@@ -20,47 +28,105 @@ class ChatRepositoryImpl @Inject constructor(
         // Выбираем подходящий системный промпт
         val systemPrompt = getSystemPrompt(currentStage)
         
+        // Формируем историю сообщений для провайдера
         val messages = buildList {
-            // System message
-            add(
-                MessageDto(
-                    role = "system",
-                    text = systemPrompt
-                )
-            )
-            
             // Для агентов генерации добавляем контекст
             if (currentStage.startsWith("Генерация_способ_")) {
                 // Извлекаем собранную информацию из истории
                 val context = extractContext(request.conversationHistory)
                 add(
-                    MessageDto(
-                        role = "user",
-                        text = "Создай анекдот на основе:\nСитуация: ${context.situation}\nГерой: ${context.heroes}\nТип юмора: ${context.humorType}"
+                    Message(
+                        id = "context",
+                        text = "Создай анекдот на основе:\nСитуация: ${context.situation}\nГерой: ${context.heroes}\nТип юмора: ${context.humorType}",
+                        isUser = true,
+                        category = ""
                     )
                 )
             } else {
                 // Conversation history для агента-сборщика
-            request.conversationHistory.forEach { message ->
-                add(
-                    MessageDto(
-                        role = if (message.isUser) "user" else "assistant",
-                        text = message.text
+                addAll(request.conversationHistory)
+                
+                // Current user message
+                if (request.userMessage.trim().isNotEmpty() && request.userMessage != "CONTINUE") {
+                    add(
+                        Message(
+                            id = "current",
+                            text = request.userMessage,
+                            isUser = true,
+                            category = ""
+                        )
                     )
-                )
-            }
-            
-            // Current user message
-            add(
-                MessageDto(
-                    role = "user",
-                    text = request.userMessage
-                )
-            )
+                }
             }
         }
 
-        api.sendMessage(messages, request.temperature).getOrThrow()
+        // Получаем провайдер для выбранной модели
+        val provider = registry.getProvider(request.modelId)
+            ?: throw IllegalArgumentException("Model not found: ${request.modelId}")
+        
+        // Вызываем провайдер
+        val llmResponse = provider.sendMessage(
+            systemPrompt = systemPrompt,
+            messages = messages,
+            temperature = request.temperature
+        ).getOrThrow()
+
+        // Парсим ответ
+        parseResponse(llmResponse.text, llmResponse.metrics)
+    }
+    
+    private fun parseResponse(responseText: String, metrics: com.arekalov.aiadventchallenge.domain.model.ModelMetrics): ChatResponse {
+        return try {
+            // Очищаем текст от markdown обертки (```json, ```, и т.д.)
+            val cleanedText = responseText
+                .trim()
+                .removePrefix("```json")
+                .removePrefix("```")
+                .removeSuffix("```")
+                .trim()
+            
+            Log.d("ChatRepository", "Parsing response: $cleanedText")
+            
+            // Пытаемся распарсить JSON
+            val jsonElement = json.parseToJsonElement(cleanedText)
+            val jsonObject = jsonElement.jsonObject
+            
+            ChatResponse(
+                text = jsonObject["response"]?.jsonPrimitive?.content ?: cleanedText,
+                category = jsonObject["category"]?.jsonPrimitive?.content ?: "",
+                stage = jsonObject["stage"]?.jsonPrimitive?.content ?: "",
+                situation = jsonObject["situation"]?.jsonPrimitive?.content ?: "",
+                heroes = jsonObject["heroes"]?.jsonPrimitive?.content ?: "",
+                humorType = jsonObject["humor_type"]?.jsonPrimitive?.content ?: "",
+                totalTokens = metrics.totalTokens,
+                metrics = metrics
+            )
+        } catch (e: Exception) {
+            Log.w("ChatRepository", "Failed to parse JSON response, using text as-is", e)
+            // Если не удалось распарсить JSON, используем текст как есть
+            // Пытаемся определить category по содержимому
+            val category = when {
+                responseText.contains("🎯 Способ 1:") -> "Генерация_способ_1"
+                responseText.contains("🔢 Способ 2:") -> "Генерация_способ_2"
+                responseText.contains("📝 Способ 3:") -> "Генерация_способ_3"
+                responseText.contains("👥 Способ 4:") -> "Генерация_способ_4"
+                responseText.contains("выбери героя") -> "Сбор_ситуации"
+                responseText.contains("тип юмора") -> "Выбор_героя"
+                responseText.contains("Сейчас покажу") || responseText.contains("4 разных способа") -> "Генерация_способ_1"
+                else -> ""
+            }
+            
+            ChatResponse(
+                text = responseText,
+                category = category,
+                stage = category,
+                situation = "",
+                heroes = "",
+                humorType = "",
+                totalTokens = metrics.totalTokens,
+                metrics = metrics
+            )
+        }
     }
     
     private fun determineNextStage(lastBotMessage: Message?, userMessage: String): String {

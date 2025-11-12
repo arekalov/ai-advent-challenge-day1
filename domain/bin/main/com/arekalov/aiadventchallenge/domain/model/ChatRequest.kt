@@ -3,6 +3,7 @@ package com.arekalov.aiadventchallenge.domain.model
 data class ChatRequest(
     val userMessage: String,
     val conversationHistory: List<Message> = emptyList(),
-    val temperature: Float = 0.7f
+    val temperature: Float = 0.7f,
+    val modelId: String = "gemma-2-9b"
 )
 

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arekalov.aiadventchallenge.R
+import com.arekalov.aiadventchallenge.data.provider.ModelRegistry
 import com.arekalov.aiadventchallenge.domain.model.ChatRequest
 import com.arekalov.aiadventchallenge.domain.model.Message
 import com.arekalov.aiadventchallenge.domain.repository.ChatRepository
@@ -20,6 +21,7 @@ import javax.inject.Inject
 
 class ChatViewModel @Inject constructor(
     private val repository: ChatRepository,
+    private val registry: ModelRegistry,
     private val context: Context
 ) : ViewModel() {
 
@@ -30,6 +32,9 @@ class ChatViewModel @Inject constructor(
     val sideEffect = _sideEffect.receiveAsFlow()
 
     init {
+        // Загружаем доступные модели
+        _state.update { it.copy(availableModels = registry.getAllModels()) }
+        
         // Добавляем приветственное сообщение от агента
         val welcomeMessage = Message(
             id = UUID.randomUUID().toString(),
@@ -46,6 +51,8 @@ class ChatViewModel @Inject constructor(
             is ChatIntent.SendMessage -> sendMessage(intent.text)
             is ChatIntent.UpdateInputText -> updateInputText(intent.text)
             is ChatIntent.UpdateTemperature -> updateTemperature(intent.temperature)
+            is ChatIntent.SelectModel -> selectModel(intent.modelId)
+            ChatIntent.ToggleSettings -> toggleSettings()
             ChatIntent.ClearError -> clearError()
         }
     }
@@ -56,6 +63,14 @@ class ChatViewModel @Inject constructor(
     
     private fun updateTemperature(temperature: Float) {
         _state.update { it.copy(selectedTemperature = temperature) }
+    }
+    
+    private fun selectModel(modelId: String) {
+        _state.update { it.copy(selectedModelId = modelId) }
+    }
+    
+    private fun toggleSettings() {
+        _state.update { it.copy(isSettingsExpanded = !it.isSettingsExpanded) }
     }
 
     private fun sendMessage(text: String) {
@@ -81,7 +96,8 @@ class ChatViewModel @Inject constructor(
             val request = ChatRequest(
                 userMessage = inputText,
                 conversationHistory = _state.value.messages.dropLast(1),
-                temperature = _state.value.selectedTemperature
+                temperature = _state.value.selectedTemperature,
+                modelId = _state.value.selectedModelId
             )
 
             repository.sendMessage(request)
@@ -91,7 +107,8 @@ class ChatViewModel @Inject constructor(
                         text = response.text,
                         isUser = false,
                         category = response.category,
-                        totalTokens = response.totalTokens
+                        totalTokens = response.totalTokens,
+                        metrics = response.metrics
                     )
                     _state.update {
                         it.copy(
@@ -152,7 +169,8 @@ class ChatViewModel @Inject constructor(
             val request = ChatRequest(
                 userMessage = "CONTINUE",
                 conversationHistory = _state.value.messages,
-                temperature = _state.value.selectedTemperature
+                temperature = _state.value.selectedTemperature,
+                modelId = _state.value.selectedModelId
             )
             
             repository.sendMessage(request)
@@ -162,7 +180,8 @@ class ChatViewModel @Inject constructor(
                         text = response.text,
                         isUser = false,
                         category = response.category,
-                        totalTokens = response.totalTokens
+                        totalTokens = response.totalTokens,
+                        metrics = response.metrics
                     )
                     _state.update {
                         it.copy(

@@ -6,6 +6,7 @@ data class Message(
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
     val category: String,
-    val totalTokens: Int? = null
+    val totalTokens: Int? = null,
+    val metrics: ModelMetrics? = null // Метрики для сообщений от модели
 )
 

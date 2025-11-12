@@ -1,8 +1,10 @@
 package com.arekalov.aiadventchallenge.presentation.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +34,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -170,14 +175,50 @@ fun ChatScreen(
                 }
             }
 
-            // Temperature selector
-            TemperatureSelector(
-                selectedTemperature = state.selectedTemperature,
-                onTemperatureChange = { temperature ->
-                    viewModel.handleIntent(ChatIntent.UpdateTemperature(temperature))
-                },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            // Settings toggle button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                FilledTonalIconButton(
+                    onClick = { viewModel.handleIntent(ChatIntent.ToggleSettings) }
+                ) {
+                    Icon(
+                        imageVector = if (state.isSettingsExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = if (state.isSettingsExpanded) "Скрыть настройки" else "Показать настройки"
+                    )
+                }
+            }
+            
+            // Collapsible settings
+            AnimatedVisibility(
+                visible = state.isSettingsExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column {
+                    // Model selector
+                    ModelSelector(
+                        availableModels = state.availableModels,
+                        selectedModelId = state.selectedModelId,
+                        onModelSelected = { modelId ->
+                            viewModel.handleIntent(ChatIntent.SelectModel(modelId))
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    
+                    // Temperature selector
+                    TemperatureSelector(
+                        selectedTemperature = state.selectedTemperature,
+                        onTemperatureChange = { temperature ->
+                            viewModel.handleIntent(ChatIntent.UpdateTemperature(temperature))
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+            }
 
             // Input field
             MessageInput(
@@ -268,26 +309,44 @@ fun MessageItem(message: Message) {
                         )
                     }
                     
-                    // Токены (только для сообщений ассистента)
-                    if (!message.isUser && message.totalTokens != null) {
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (message.isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
-                            } else {
-                                MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
-                            }
-                        )
-                        Text(
-                            text = "${message.totalTokens} tokens",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (message.isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            } else {
-                                MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                            }
-                        )
+                    // Метрики (только для сообщений ассистента)
+                    message.metrics?.let { metrics ->
+                        if (!message.isUser) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = metrics.getFormattedTime(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "${metrics.totalTokens}t",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    } ?: run {
+                        if (!message.isUser && message.totalTokens != null) {
+                            // Fallback для старых сообщений без metrics
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "${message.totalTokens} tokens",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }
@@ -399,6 +458,81 @@ private fun MessageItemAssistantPreview() {
 }
 
 @Composable
+fun ModelSelector(
+    availableModels: List<com.arekalov.aiadventchallenge.domain.model.ModelInfo>,
+    selectedModelId: String,
+    onModelSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    val selectedModel = availableModels.find { it.id == selectedModelId }
+        ?: availableModels.firstOrNull()
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            TextButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = selectedModel?.displayName ?: "Выберите модель",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = selectedModel?.description ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                availableModels.forEach { model ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    text = model.displayName,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = model.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = {
+                            onModelSelected(model.id)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun TemperatureSelector(
     selectedTemperature: Float,
     onTemperatureChange: (Float) -> Unit,
@@ -421,16 +555,10 @@ fun TemperatureSelector(
         else -> "🔥" to "Креативный режим"
     }
     
-    val backgroundColor = when {
-        selectedTemperature <= 0.3f -> Color(0xFFE3F2FD) // Light Blue
-        selectedTemperature < 1.0f -> Color(0xFFF1F8E9) // Light Green
-        else -> Color(0xFFFFEBEE) // Light Red
-    }
-    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
@@ -445,11 +573,20 @@ fun TemperatureSelector(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "$emoji $description",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = emoji,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                     Text(
                         text = "%.1f".format(selectedTemperature),
                         style = MaterialTheme.typography.bodySmall,
