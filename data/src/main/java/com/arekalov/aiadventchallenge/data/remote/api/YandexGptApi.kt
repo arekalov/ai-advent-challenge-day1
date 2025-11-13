@@ -10,6 +10,7 @@ import com.arekalov.aiadventchallenge.data.remote.dto.Schema
 import com.arekalov.aiadventchallenge.data.remote.dto.YandexGptRequest
 import com.arekalov.aiadventchallenge.data.remote.dto.YandexGptResponse
 import com.arekalov.aiadventchallenge.domain.model.ChatResponse
+import com.arekalov.aiadventchallenge.domain.model.ModelMetrics
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.post
@@ -36,6 +37,8 @@ class YandexGptApi @Inject constructor(
         messages: List<MessageDto>,
         temperature: Float = 0.7f
     ): Result<ChatResponse> = runCatching {
+        val startTime = System.currentTimeMillis()
+        
         val request = YandexGptRequest(
             modelUri = "gpt://$folderId/yandexgpt",
             completionOptions = CompletionOptions(
@@ -67,6 +70,8 @@ class YandexGptApi @Inject constructor(
             setBody(request)
         }
 
+        val responseTimeMs = System.currentTimeMillis() - startTime
+        
         // Логируем сырой HTTP ответ
         val rawResponse = httpResponse.bodyAsText()
         Log.d("YandexGptApi", "Raw API response:\n$rawResponse")
@@ -78,7 +83,19 @@ class YandexGptApi @Inject constructor(
             ?: throw Exception("No response from API")
 
         val messageText = alternative.message.text
-        val totalTokens = response.result.usage.totalTokens.toIntOrNull()
+        val usage = response.result.usage
+        
+        // Создаем метрики на основе данных от Yandex API
+        val metrics = ModelMetrics(
+            responseTimeMs = responseTimeMs,
+            inputTokens = usage.inputTextTokens.toIntOrNull() ?: 0,
+            outputTokens = usage.completionTokens.toIntOrNull() ?: 0,
+            totalTokens = usage.totalTokens.toIntOrNull() ?: 0,
+            modelName = "YandexGPT",
+            estimatedCost = 0.0 // YandexGPT бесплатен для тестирования
+        )
+        
+        Log.d("YandexGptApi", "Token usage: input=${metrics.inputTokens}, output=${metrics.outputTokens}, total=${metrics.totalTokens}, time=${metrics.getFormattedTime()}")
 
         // Обрабатываем статус ответа
         when {
@@ -103,7 +120,8 @@ class YandexGptApi @Inject constructor(
                     text = jsonResponse.response.trim(),
                     category = jsonResponse.category,
                     stage = jsonResponse.stage,
-                    totalTokens = totalTokens
+                    totalTokens = metrics.totalTokens,
+                    metrics = metrics
                 )
             }
 
@@ -114,7 +132,8 @@ class YandexGptApi @Inject constructor(
                     text = messageText,
                     category = "Другое",
                     stage = "Ошибка",
-                    totalTokens = totalTokens
+                    totalTokens = metrics.totalTokens,
+                    metrics = metrics
                 )
             }
 
@@ -128,7 +147,8 @@ class YandexGptApi @Inject constructor(
                     text = messageText,
                     category = "Другое",
                     stage = "Ошибка",
-                    totalTokens = totalTokens
+                    totalTokens = metrics.totalTokens,
+                    metrics = metrics
                 )
             }
         }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,8 +25,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,6 +43,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -55,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -219,6 +229,50 @@ fun ChatScreen(
                     )
                 }
             }
+            
+            // Token usage visualization
+            TokenUsageBar(
+                currentUsage = state.currentTokenUsage,
+                limit = state.tokenLimit,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            
+            // Token testing mode
+            if (state.isTokenTestModeEnabled) {
+                TokenTestPanel(
+                    onTestSelected = { testType ->
+                        viewModel.handleIntent(ChatIntent.SendTokenTest(testType))
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            
+            // Toggle button for token test mode
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { viewModel.handleIntent(ChatIntent.ToggleTokenTestMode) }
+                ) {
+                    Icon(
+                        imageVector = if (state.isTokenTestModeEnabled) 
+                            Icons.Default.Close 
+                        else 
+                            Icons.Default.Settings,
+                        contentDescription = "Token test mode"
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (state.isTokenTestModeEnabled) 
+                            "Скрыть тесты" 
+                        else 
+                            "Тесты токенов"
+                    )
+                }
+            }
 
             // Input field
             MessageInput(
@@ -318,7 +372,7 @@ fun MessageItem(message: Message) {
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
                             )
                             Text(
-                                text = metrics.getFormattedTime(),
+                                text = "⏱️ ${metrics.getFormattedTime()}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                             )
@@ -328,7 +382,17 @@ fun MessageItem(message: Message) {
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
                             )
                             Text(
-                                text = "${metrics.totalTokens}t",
+                                text = "📥 ${metrics.inputTokens}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "📤 ${metrics.outputTokens}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                             )
@@ -636,6 +700,159 @@ private fun MessageInputEmptyPreview() {
             onSendClick = {},
             enabled = true
         )
+    }
+}
+
+@Composable
+fun TokenUsageBar(
+    currentUsage: Int,
+    limit: Int,
+    modifier: Modifier = Modifier
+) {
+    val progress = (currentUsage.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
+    val isNearLimit = progress > 0.8f
+    val isOverLimit = progress >= 1.0f
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Использование токенов",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "$currentUsage / $limit",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = when {
+                        isOverLimit -> MaterialTheme.colorScheme.error
+                        isNearLimit -> Color(0xFFFF9800) // Orange
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = when {
+                    isOverLimit -> MaterialTheme.colorScheme.error
+                    isNearLimit -> Color(0xFFFF9800) // Orange
+                    else -> MaterialTheme.colorScheme.primary
+                },
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            
+            if (isNearLimit) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isOverLimit) 
+                        "⚠️ Превышен лимит контекста!" 
+                    else 
+                        "⚠️ Приближается лимит контекста",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isOverLimit) 
+                        MaterialTheme.colorScheme.error 
+                    else 
+                        Color(0xFFFF9800)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TokenTestPanel(
+    onTestSelected: (TokenTestType) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "🧪 Тестирование токенов",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Протестируйте поведение модели с запросами разной длины:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Test buttons
+            TokenTestType.values().forEach { testType ->
+                Button(
+                    onClick = { onTestSelected(testType) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = TokenTestUtils.getTestDescription(testType),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Icon(
+                                imageVector = when (testType) {
+                                    TokenTestType.SHORT -> Icons.Default.Check
+                                    TokenTestType.MEDIUM -> Icons.Default.Info
+                                    TokenTestType.LONG -> Icons.Default.Warning
+                                    TokenTestType.OVERFLOW -> Icons.Default.Close
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = TokenTestUtils.getExpectedBehavior(testType),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

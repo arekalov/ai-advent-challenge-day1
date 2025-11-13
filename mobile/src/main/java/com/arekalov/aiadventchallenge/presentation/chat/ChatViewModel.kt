@@ -54,6 +54,8 @@ class ChatViewModel @Inject constructor(
             is ChatIntent.SelectModel -> selectModel(intent.modelId)
             ChatIntent.ToggleSettings -> toggleSettings()
             ChatIntent.ClearError -> clearError()
+            ChatIntent.ToggleTokenTestMode -> toggleTokenTestMode()
+            is ChatIntent.SendTokenTest -> sendTokenTest(intent.testType)
         }
     }
 
@@ -116,6 +118,7 @@ class ChatViewModel @Inject constructor(
                             isLoading = false
                         )
                     }
+                    updateTokenUsage()
                     _sideEffect.send(ChatSideEffect.ScrollToBottom)
                     
                     // Автоматически запускаем цепочку генерации
@@ -189,6 +192,7 @@ class ChatViewModel @Inject constructor(
                             isLoading = false
                         )
                     }
+                    updateTokenUsage()
                     _sideEffect.send(ChatSideEffect.ScrollToBottom)
                     
                     // Проверяем, нужно ли продолжить дальше
@@ -226,6 +230,31 @@ class ChatViewModel @Inject constructor(
             }
             _sideEffect.send(ChatSideEffect.ScrollToBottom)
         }
+    }
+    
+    private fun toggleTokenTestMode() {
+        _state.update { it.copy(isTokenTestModeEnabled = !it.isTokenTestModeEnabled) }
+    }
+    
+    private fun sendTokenTest(testType: TokenTestType) {
+        val testRequest = when (testType) {
+            TokenTestType.SHORT -> TokenTestUtils.getShortRequest()
+            TokenTestType.MEDIUM -> TokenTestUtils.getMediumRequest()
+            TokenTestType.LONG -> TokenTestUtils.getLongRequest()
+            TokenTestType.OVERFLOW -> TokenTestUtils.getOverflowRequest()
+        }
+        
+        // Отправляем тестовый запрос
+        sendMessage(testRequest)
+    }
+    
+    private fun updateTokenUsage() {
+        // Подсчитываем общее количество токенов в истории
+        val totalTokens = _state.value.messages
+            .mapNotNull { it.metrics?.totalTokens }
+            .sum()
+        
+        _state.update { it.copy(currentTokenUsage = totalTokens) }
     }
 }
 
