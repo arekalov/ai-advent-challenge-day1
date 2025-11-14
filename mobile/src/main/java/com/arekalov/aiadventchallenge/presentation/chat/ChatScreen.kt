@@ -227,6 +227,112 @@ fun ChatScreen(
                         },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
+                    
+                    // Day 8: Compress history button
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Button(
+                            onClick = { viewModel.handleIntent(ChatIntent.CompressHistory) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            enabled = !state.isCompressing && !state.isLoading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (state.isCompressing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(text = "🗜️")
+                                }
+                                Text(
+                                    text = if (state.isCompressing) "Сжатие..." else "Сжать историю",
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        if (state.tokensSaved > 0) {
+                            Text(
+                                text = "Сэкономлено токенов: ${state.tokensSaved}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    
+                    // Token test mode toggle
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.handleIntent(ChatIntent.ToggleTokenTestMode) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Token tests"
+                                    )
+                                    Text(
+                                        text = "Тесты токенов",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (state.isTokenTestModeEnabled) 
+                                        Icons.Default.KeyboardArrowUp 
+                                    else 
+                                        Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Token test panel
+                    AnimatedVisibility(
+                        visible = state.isTokenTestModeEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        TokenTestPanel(
+                            onTestSelected = { testType ->
+                                viewModel.handleIntent(ChatIntent.SendTokenTest(testType))
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
             
@@ -236,43 +342,6 @@ fun ChatScreen(
                 limit = state.tokenLimit,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
-            
-            // Token testing mode
-            if (state.isTokenTestModeEnabled) {
-                TokenTestPanel(
-                    onTestSelected = { testType ->
-                        viewModel.handleIntent(ChatIntent.SendTokenTest(testType))
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-            
-            // Toggle button for token test mode
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(
-                    onClick = { viewModel.handleIntent(ChatIntent.ToggleTokenTestMode) }
-                ) {
-                    Icon(
-                        imageVector = if (state.isTokenTestModeEnabled) 
-                            Icons.Default.Close 
-                        else 
-                            Icons.Default.Settings,
-                        contentDescription = "Token test mode"
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (state.isTokenTestModeEnabled) 
-                            "Скрыть тесты" 
-                        else 
-                            "Тесты токенов"
-                    )
-                }
-            }
 
             // Input field
             MessageInput(
@@ -297,7 +366,9 @@ fun MessageItem(message: Message) {
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = if (message.isUser) {
+                containerColor = if (message.isSummary) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else if (message.isUser) {
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
                     MaterialTheme.colorScheme.secondaryContainer
@@ -314,10 +385,35 @@ fun MessageItem(message: Message) {
             Column(
                 modifier = Modifier.padding(12.dp)
             ) {
+                // Day 8: Badge для сжатых сообщений
+                if (message.isSummary) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "🗜️ СЖАТО",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        if (message.summarizedCount > 0) {
+                            Text(
+                                text = "(${message.summarizedCount} сообщ.)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (message.isUser) {
+                    color = if (message.isSummary) {
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    } else if (message.isUser) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSecondaryContainer

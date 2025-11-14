@@ -56,6 +56,7 @@ class ChatViewModel @Inject constructor(
             ChatIntent.ClearError -> clearError()
             ChatIntent.ToggleTokenTestMode -> toggleTokenTestMode()
             is ChatIntent.SendTokenTest -> sendTokenTest(intent.testType)
+            ChatIntent.CompressHistory -> compressHistory()
         }
     }
 
@@ -255,6 +256,59 @@ class ChatViewModel @Inject constructor(
             .sum()
         
         _state.update { it.copy(currentTokenUsage = totalTokens) }
+    }
+    
+    // Day 8: Ручное сжатие истории
+    private fun compressHistory() {
+        if (_state.value.isCompressing) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(isCompressing = true) }
+            
+            // Получаем сообщения, исключая приветственное и последние 3
+            val messages = _state.value.messages
+            if (messages.size <= 4) {
+                _state.update { it.copy(isCompressing = false) }
+                _sideEffect.send(ChatSideEffect.ShowError("Недостаточно сообщений для сжатия"))
+                return@launch
+            }
+            
+            val messagesToCompress = messages.drop(1).dropLast(3)
+            
+            // Подсчитываем токены до сжатия
+            val tokensBeforeCompression = messagesToCompress
+                .mapNotNull { it.metrics?.totalTokens ?: it.text.length / 4 }
+                .sum()
+            
+            // Выполняем сжатие
+            repository.compressHistory(messagesToCompress)
+                .onSuccess { summaryMessage ->
+                    // Заменяем сжатые сообщения на саммари
+                    val welcomeMessage = messages.first()
+                    val recentMessages = messages.takeLast(3)
+                    val newMessages = listOf(welcomeMessage, summaryMessage) + recentMessages
+                    
+                    val tokensSaved = tokensBeforeCompression - (summaryMessage.metrics?.totalTokens ?: 0)
+                    
+                    _state.update {
+                        it.copy(
+                            messages = newMessages,
+                            tokensSaved = it.tokensSaved + tokensSaved,
+                            isCompressing = false
+                        )
+                    }
+                    updateTokenUsage()
+                    _sideEffect.send(ChatSideEffect.ScrollToBottom)
+                }
+                .onFailure { exception ->
+                    _state.update { it.copy(isCompressing = false) }
+                    _sideEffect.send(
+                        ChatSideEffect.ShowError(
+                            exception.message ?: "Ошибка сжатия истории"
+                        )
+                    )
+                }
+        }
     }
 }
 

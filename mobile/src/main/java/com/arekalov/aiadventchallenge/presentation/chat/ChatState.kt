@@ -13,6 +13,10 @@ data class ChatState(
     val isSettingsExpanded: Boolean = false,
     val isTokenTestModeEnabled: Boolean = false,
     val currentTokenUsage: Int = 0, // Сумма токенов в текущей истории
-    val tokenLimit: Int = 8000 // Лимит для YandexGPT
+    val tokenLimit: Int = 8000, // Лимит для YandexGPT
+    
+    // Day 8: Сжатие истории
+    val isCompressing: Boolean = false, // Флаг процесса сжатия
+    val tokensSaved: Int = 0 // Всего сохраненные токены
 )
 

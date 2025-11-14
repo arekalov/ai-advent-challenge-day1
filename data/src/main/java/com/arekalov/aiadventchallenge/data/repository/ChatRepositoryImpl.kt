@@ -76,6 +76,56 @@ class ChatRepositoryImpl @Inject constructor(
         ).getOrThrow()
     }
     
+    // Day 8: Функция сжатия истории диалога
+    override suspend fun compressHistory(messages: List<Message>): Result<Message> = runCatching {
+        Log.d("ChatRepository", "Starting history compression for ${messages.size} messages")
+        
+        // Подсчитываем токены до сжатия
+        val tokensBeforeCompression = messages.mapNotNull { it.metrics?.totalTokens ?: it.text.length / 4 }.sum()
+        
+        // Формируем промпт для сжатия
+        val compressionPrompt = """
+            Создай краткое саммари следующей истории диалога. 
+            Сохрани всю важную информацию: ситуацию, героев, тип юмора, и основные моменты разговора.
+            Саммари должно быть достаточно подробным, чтобы продолжить разговор с учётом контекста.
+            
+            История диалога:
+            ${messages.joinToString("\n") { msg ->
+                "${if (msg.isUser) "Пользователь" else "Ассистент"}: ${msg.text}"
+            }}
+            
+            Саммари (в одном абзаце):
+        """.trimIndent()
+        
+        // Отправляем запрос на сжатие
+        val summaryMessages = listOf(
+            MessageDto(role = "system", text = "Ты — ассистент, который создаёт краткие саммари диалогов, сохраняя всю важную информацию."),
+            MessageDto(role = "user", text = compressionPrompt)
+        )
+        
+        val response = yandexGptApi.sendMessage(
+            messages = summaryMessages,
+            temperature = 0.3f // Низкая температура для более точного саммари
+        ).getOrThrow()
+        
+        // Создаём сжатое сообщение
+        val summaryMessage = Message(
+            id = "summary_${System.currentTimeMillis()}",
+            text = "📝 Саммари предыдущих ${messages.size} сообщений:\n${response.text}",
+            isUser = false,
+            category = "summary",
+            isSummary = true,
+            summarizedCount = messages.size,
+            metrics = response.metrics
+        )
+        
+        val tokensAfterCompression = response.metrics?.totalTokens ?: response.text.length / 4
+        Log.d("ChatRepository", "Compression completed: ${messages.size} messages -> 1 summary")
+        Log.d("ChatRepository", "Tokens: $tokensBeforeCompression -> $tokensAfterCompression (saved: ${tokensBeforeCompression - tokensAfterCompression})")
+        
+        summaryMessage
+    }
+    
     private fun determineNextStage(lastBotMessage: Message?, userMessage: String): String {
         // Если это автоматическое продолжение (пустое сообщение или токен)
         if (userMessage.trim().isEmpty() || userMessage == "CONTINUE") {
